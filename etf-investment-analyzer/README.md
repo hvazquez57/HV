@@ -223,6 +223,56 @@ Install development dependencies after creating the virtual environment:
 
 The unit tests cover allocation math, weights, historical metrics, data rejection, current-session exclusion, joint bootstrap behavior, report exports, CLI validation, and HTML escaping. The download-failure test mocks the provider; tests do not require live market data.
 
+## Next steps for future enhancements
+
+The items below are proposed work, **not currently implemented features**. Prioritize data integrity and reproducibility before expanding the investment model or interface. Keep the current $10,000, two-year example available as a regression case.
+
+### 1. Strengthen data reliability and reproducibility
+
+- Use an exchange trading calendar to validate expected sessions and distinguish holidays from missing prices; test weekends, holiday closures, and incomplete sessions.
+- Add bounded retries for transient provider errors and rate limits. Preserve the current fail-closed behavior for missing or stale data; never substitute demo data for live prices.
+- Introduce an explicit cached-data mode with source dates and a prominent stale-data warning, separate from live and synthetic modes.
+- Write reports into timestamped run directories and publish them only after every output succeeds, so a failed run cannot leave a mixture of old and new files.
+- Record the Git commit, resolved dependency versions, input-data hashes, settings, and random seeds with each run. Add a tested dependency lock or constraints file and resolve the current NumPy/pandas timedelta deprecation warnings.
+
+Completion criterion: a saved input snapshot and recorded environment reproduce the numerical results, and injected download/write failures cannot produce a misleading successful report.
+
+### 2. Make assumptions configurable without weakening safeguards
+
+- Move portfolio definitions and risk limits into a validated configuration file. Require nonnegative weights totaling one and make equity exposure and overlapping holdings explicit.
+- Support other investment horizons only after updating history requirements, rolling windows, bootstrap path lengths, stress assumptions, report labels, and tests together. The current CLI continues to accept only two years until this is complete.
+- Add optional contributions, withdrawals, rebalancing schedules, transaction costs, inflation assumptions, and residual-cash treatment. Clearly separate fractional target portfolios from whole-share implementations.
+- Treat support for other currencies as a separate extension requiring exchange-rate data and explicit reporting-currency assumptions, not just a different currency symbol.
+
+Completion criterion: invalid configurations fail clearly, defaults preserve the existing calculations, and each new assumption is disclosed in both the report and JSON output.
+
+### 3. Expand risk analysis and model validation
+
+- Add daily drawdown analysis with a clearly specified rebalancing convention, plus rolling risk charts and historical crisis-period comparisons where data is available.
+- Compare bootstrap block lengths and historical sample periods. Add walk-forward evaluation using only information available at each evaluation date to avoid look-ahead bias.
+- Explore separate, dated forward-yield and interest-rate scenarios for Treasury exposures rather than assuming historical average returns describe current income prospects.
+- Expand transparent equity, interest-rate, and inflation stress cases, documenting whether shocks are hypothetical or historical and whether rebalancing is assumed.
+- Report sensitivity and uncertainty alongside results; do not relabel bootstrap loss frequencies as reliable future probabilities or rank portfolios solely by backtested growth.
+
+Completion criterion: model changes have deterministic regression tests, documented sensitivity results, and limitations explaining where the model can fail.
+
+### 4. Improve the reporting and development experience
+
+- Add accessible charts for historical wealth, drawdowns, portfolio exposures, and terminal-value distributions while retaining the CSV/JSON exports.
+- Surface warnings, source dates, allocation differences, and scenario assumptions near the relevant results rather than only in methodology notes.
+- Add continuous integration for offline unit tests, Ruff, CLI smoke tests, and report-generation checks. Keep network-dependent provider checks separate from required deterministic tests.
+- Test supported Python versions and the Windows launcher, including clean installation from the nested project directory. Consider packaging the CLI to simplify setup.
+
+Completion criterion: a fresh checkout can install, test, and generate a clearly labeled demo report through documented commands without a brokerage account or market-data credentials.
+
+### Suggested implementation order and contribution workflow
+
+Start with reproducible run metadata and safer report publication, then add CI coverage, configurable portfolios, and model/report improvements in small independent changes.
+
+The `feature/future-enhancements` branch is available for follow-up work. Before starting an enhancement, synchronize with the latest `main`; use a focused feature branch when the work can be reviewed independently. Open integration PRs against **`main`**, include tests and methodology/documentation updates, and keep virtual environments, credentials, and caches out of commits. Update tracked live reports only intentionally, with their generation settings and data dates documented.
+
+[PR #1](https://github.com/hvazquez57/HV/pull/1) is a draft retrospective review against `review/initial-project-baseline`, not an integration PR into `main`. Do not use that review baseline as the destination for new enhancements. This roadmap does not add automated trading or guarantees of investment performance.
+
 ## Troubleshooting
 
 - **Python not found:** install Python or use its full executable path; the Microsoft Store alias is not a Python installation.
