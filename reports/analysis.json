@@ -1,0 +1,275 @@
+{
+  "mode": "LIVE MARKET DATA",
+  "generated_utc": "2026-10-23T17:25:53.817560+00:00",
+  "latest_price_date": "2026-10-22",
+  "price_history_start": "2016-10-24",
+  "monthly_return_start": "2016-12-31",
+  "monthly_return_end": "2026-09-30",
+  "investment_usd": 10000.0,
+  "horizon_years": 2,
+  "simulations": 10000,
+  "seed": 42,
+  "source": "Yahoo Finance via yfinance",
+  "stress_asset_total_returns": {
+    "VTI": -0.35,
+    "VUG": -0.45,
+    "VXUS": -0.35,
+    "VGSH": -0.05,
+    "SHV": 0.0
+  },
+  "notes": [
+    "Educational comparison, not personalized investment advice. USD and US-listed ETFs are assumed. No trades are submitted.",
+    "Two years is a short equity horizon. Neither portfolio is guaranteed low risk; stocks and Treasury ETFs can lose principal. If the money must be available in full in two years, compare insured deposits or individual Treasuries matched to that date. An ETF has no fixed redemption value or maturity for your shares.",
+    "The portfolios are predefined examples, not optimized recommendations. The moderate mix takes more equity risk. VUG overlaps VTI; it is a growth tilt, not independent diversification. No leveraged, inverse, or sector ETFs are used.",
+    "Historical returns use dividend/split-adjusted prices as a reinvested-distribution proxy. Fund expenses are already reflected in prices; do not deduct them twice. Taxes, spreads, commissions and inflation are excluded; figures are nominal USD.",
+    "History, rolling results and simulations assume monthly rebalancing to target weights and fractional holdings. Whole-share orders are only approximate initial allocations. Rebalancing can incur taxes and costs.",
+    "Simulation jointly resamples three-month blocks of historical monthly ETF returns, preserving within-block co-movement. It assumes the past distribution is relevant; yields, valuations and regimes can change. Percentiles and loss frequencies are model outputs, NOT calibrated future probabilities. Losses outside the displayed range are possible.",
+    "Overlapping historical two-year windows are not independent observations. Historical maximum drawdown is not a future loss limit. Monthly observations can miss deeper intramonth losses.",
+    "The stress illustration applies the disclosed cumulative asset shocks to initial weights without rebalancing. It is separate from the resampling model, not a worst case, and not a prediction.",
+    "Live data is from Yahoo Finance via yfinance, an unofficial research tool subject to provider terms and possible errors or delays. Today's incomplete daily bar is excluded. Share estimates use the last completed session's unadjusted close, not an executable quote. Verify prices and fund documents before acting.",
+    "The ten-year sample may not include all relevant crises. No macroeconomic, valuation or forward yield model is used. Falling interest rates can lower future Treasury ETF income; foreign holdings add currency and geopolitical risks."
+  ],
+  "etf_history": [
+    {
+      "ticker": "VTI",
+      "description": "Broad US stocks",
+      "historical_annualized_return": 0.14713527275258875,
+      "historical_annualized_volatility": 0.1583538847474541,
+      "historical_monthly_max_drawdown": -0.24819142798259386,
+      "historical_horizon_worst_return": -0.09946807269351032,
+      "historical_horizon_loss_frequency": 0.07368421052631578,
+      "overlapping_historical_windows": 95
+    },
+    {
+      "ticker": "VUG",
+      "description": "US growth stocks (overlaps VTI)",
+      "historical_annualized_return": 0.18450321523826196,
+      "historical_annualized_volatility": 0.18552531009843454,
+      "historical_monthly_max_drawdown": -0.33158698384489504,
+      "historical_horizon_worst_return": -0.14879662514835656,
+      "historical_horizon_loss_frequency": 0.14736842105263157,
+      "overlapping_historical_windows": 95
+    },
+    {
+      "ticker": "VXUS",
+      "description": "International stocks",
+      "historical_annualized_return": 0.0978850872535253,
+      "historical_annualized_volatility": 0.15065994023546359,
+      "historical_monthly_max_drawdown": -0.27753326732919037,
+      "historical_horizon_worst_return": -0.2112562356506864,
+      "historical_horizon_loss_frequency": 0.2631578947368421,
+      "overlapping_historical_windows": 95
+    },
+    {
+      "ticker": "VGSH",
+      "description": "Short-term US Treasury bonds",
+      "historical_annualized_return": 0.017886177686762927,
+      "historical_annualized_volatility": 0.01662114996483093,
+      "historical_monthly_max_drawdown": -0.05308713906113882,
+      "historical_horizon_worst_return": -0.05173788233971932,
+      "historical_horizon_loss_frequency": 0.23157894736842105,
+      "overlapping_historical_windows": 95
+    },
+    {
+      "ticker": "SHV",
+      "description": "Short US Treasury bills/bonds",
+      "historical_annualized_return": 0.023666701421989345,
+      "historical_annualized_volatility": 0.005787437288273683,
+      "historical_monthly_max_drawdown": -0.0029668435631666767,
+      "historical_horizon_worst_return": -0.0028955821738639864,
+      "historical_horizon_loss_frequency": 0.07368421052631578,
+      "overlapping_historical_windows": 95
+    }
+  ],
+  "portfolios": [
+    {
+      "name": "Conservative growth (25% stocks)",
+      "historical_annualized_return": 0.053888086278109704,
+      "historical_annualized_volatility": 0.040105454820851066,
+      "historical_monthly_max_drawdown": -0.082047882513692,
+      "historical_horizon_worst_return": -0.011220400599750047,
+      "historical_horizon_loss_frequency": 0.042105263157894736,
+      "overlapping_historical_windows": 95,
+      "scenario_05_usd": 10176.276256995545,
+      "scenario_median_usd": 11142.34696536321,
+      "scenario_95_usd": 12058.112412193983,
+      "simulated_loss_frequency": 0.0273,
+      "hypothetical_stress_return": -0.105,
+      "hypothetical_stress_value_usd": 8950.0,
+      "allocations": [
+        {
+          "ticker": "VTI",
+          "description": "Broad US stocks",
+          "weight": 0.15,
+          "target_usd": 1500.0,
+          "last_close_usd": 374.8999938964844,
+          "whole_shares": 4,
+          "whole_share_cost_usd": 1499.6
+        },
+        {
+          "ticker": "VUG",
+          "description": "US growth stocks (overlaps VTI)",
+          "weight": 0.05,
+          "target_usd": 500.0,
+          "last_close_usd": 87.16999816894531,
+          "whole_shares": 5,
+          "whole_share_cost_usd": 435.85
+        },
+        {
+          "ticker": "VXUS",
+          "description": "International stocks",
+          "weight": 0.05,
+          "target_usd": 500.0,
+          "last_close_usd": 82.7300033569336,
+          "whole_shares": 6,
+          "whole_share_cost_usd": 496.38
+        },
+        {
+          "ticker": "VGSH",
+          "description": "Short-term US Treasury bonds",
+          "weight": 0.25,
+          "target_usd": 2500.0,
+          "last_close_usd": 57.79999923706055,
+          "whole_shares": 43,
+          "whole_share_cost_usd": 2485.4
+        },
+        {
+          "ticker": "SHV",
+          "description": "Short US Treasury bills/bonds",
+          "weight": 0.5,
+          "target_usd": 5000.0,
+          "last_close_usd": 110.30999755859375,
+          "whole_shares": 45,
+          "whole_share_cost_usd": 4963.95
+        }
+      ],
+      "uninvested_cash_usd": 118.82
+    },
+    {
+      "name": "Moderate growth (45% stocks)",
+      "historical_annualized_return": 0.07859622137587152,
+      "historical_annualized_volatility": 0.07098612783202385,
+      "historical_monthly_max_drawdown": -0.13786978107064563,
+      "historical_horizon_worst_return": -0.03780898879173544,
+      "historical_horizon_loss_frequency": 0.07368421052631578,
+      "overlapping_historical_windows": 95,
+      "scenario_05_usd": 9987.945101399984,
+      "scenario_median_usd": 11691.333204460316,
+      "scenario_95_usd": 13416.136595450405,
+      "simulated_loss_frequency": 0.0516,
+      "hypothetical_stress_return": -0.18,
+      "hypothetical_stress_value_usd": 8200.0,
+      "allocations": [
+        {
+          "ticker": "VTI",
+          "description": "Broad US stocks",
+          "weight": 0.25,
+          "target_usd": 2500.0,
+          "last_close_usd": 374.8999938964844,
+          "whole_shares": 6,
+          "whole_share_cost_usd": 2249.4
+        },
+        {
+          "ticker": "VUG",
+          "description": "US growth stocks (overlaps VTI)",
+          "weight": 0.1,
+          "target_usd": 1000.0,
+          "last_close_usd": 87.16999816894531,
+          "whole_shares": 11,
+          "whole_share_cost_usd": 958.87
+        },
+        {
+          "ticker": "VXUS",
+          "description": "International stocks",
+          "weight": 0.1,
+          "target_usd": 1000.0,
+          "last_close_usd": 82.7300033569336,
+          "whole_shares": 12,
+          "whole_share_cost_usd": 992.76
+        },
+        {
+          "ticker": "VGSH",
+          "description": "Short-term US Treasury bonds",
+          "weight": 0.25,
+          "target_usd": 2500.0,
+          "last_close_usd": 57.79999923706055,
+          "whole_shares": 43,
+          "whole_share_cost_usd": 2485.4
+        },
+        {
+          "ticker": "SHV",
+          "description": "Short US Treasury bills/bonds",
+          "weight": 0.3,
+          "target_usd": 3000.0,
+          "last_close_usd": 110.30999755859375,
+          "whole_shares": 27,
+          "whole_share_cost_usd": 2978.37
+        }
+      ],
+      "uninvested_cash_usd": 335.2
+    },
+    {
+      "name": "Treasury reference (not guaranteed)",
+      "historical_annualized_return": 0.023666701421989345,
+      "historical_annualized_volatility": 0.005787437288273683,
+      "historical_monthly_max_drawdown": -0.0029668435631666767,
+      "historical_horizon_worst_return": -0.0028955821738639864,
+      "historical_horizon_loss_frequency": 0.07368421052631578,
+      "overlapping_historical_windows": 95,
+      "scenario_05_usd": 10253.934600808614,
+      "scenario_median_usd": 10479.245142275915,
+      "scenario_95_usd": 10718.735078483596,
+      "simulated_loss_frequency": 0.0001,
+      "hypothetical_stress_return": 0.0,
+      "hypothetical_stress_value_usd": 10000.0,
+      "allocations": [
+        {
+          "ticker": "VTI",
+          "description": "Broad US stocks",
+          "weight": 0.0,
+          "target_usd": 0.0,
+          "last_close_usd": 374.8999938964844,
+          "whole_shares": 0,
+          "whole_share_cost_usd": 0.0
+        },
+        {
+          "ticker": "VUG",
+          "description": "US growth stocks (overlaps VTI)",
+          "weight": 0.0,
+          "target_usd": 0.0,
+          "last_close_usd": 87.16999816894531,
+          "whole_shares": 0,
+          "whole_share_cost_usd": 0.0
+        },
+        {
+          "ticker": "VXUS",
+          "description": "International stocks",
+          "weight": 0.0,
+          "target_usd": 0.0,
+          "last_close_usd": 82.7300033569336,
+          "whole_shares": 0,
+          "whole_share_cost_usd": 0.0
+        },
+        {
+          "ticker": "VGSH",
+          "description": "Short-term US Treasury bonds",
+          "weight": 0.0,
+          "target_usd": 0.0,
+          "last_close_usd": 57.79999923706055,
+          "whole_shares": 0,
+          "whole_share_cost_usd": 0.0
+        },
+        {
+          "ticker": "SHV",
+          "description": "Short US Treasury bills/bonds",
+          "weight": 1.0,
+          "target_usd": 10000.0,
+          "last_close_usd": 110.30999755859375,
+          "whole_shares": 90,
+          "whole_share_cost_usd": 9927.9
+        }
+      ],
+      "uninvested_cash_usd": 72.1
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+portfolio,ticker,description,weight,target_usd,last_close_usd,whole_shares,whole_share_cost_usd
+Conservative growth (25% stocks),VTI,Broad US stocks,0.15,1500.0,374.8999938964844,4,1499.6
+Conservative growth (25% stocks),VUG,US growth stocks (overlaps VTI),0.05,500.0,87.16999816894531,5,435.85
+Conservative growth (25% stocks),VXUS,International stocks,0.05,500.0,82.7300033569336,6,496.38
+Conservative growth (25% stocks),VGSH,Short-term US Treasury bonds,0.25,2500.0,57.79999923706055,43,2485.4
+Conservative growth (25% stocks),SHV,Short US Treasury bills/bonds,0.5,5000.0,110.30999755859375,45,4963.95
+Moderate growth (45% stocks),VTI,Broad US stocks,0.25,2500.0,374.8999938964844,6,2249.4
+Moderate growth (45% stocks),VUG,US growth stocks (overlaps VTI),0.1,1000.0,87.16999816894531,11,958.87
+Moderate growth (45% stocks),VXUS,International stocks,0.1,1000.0,82.7300033569336,12,992.76
+Moderate growth (45% stocks),VGSH,Short-term US Treasury bonds,0.25,2500.0,57.79999923706055,43,2485.4
+Moderate growth (45% stocks),SHV,Short US Treasury bills/bonds,0.3,3000.0,110.30999755859375,27,2978.37
+Treasury reference (not guaranteed),VTI,Broad US stocks,0.0,0.0,374.8999938964844,0,0.0
+Treasury reference (not guaranteed),VUG,US growth stocks (overlaps VTI),0.0,0.0,87.16999816894531,0,0.0
+Treasury reference (not guaranteed),VXUS,International stocks,0.0,0.0,82.7300033569336,0,0.0
+Treasury reference (not guaranteed),VGSH,Short-term US Treasury bonds,0.0,0.0,57.79999923706055,0,0.0
+Treasury reference (not guaranteed),SHV,Short US Treasury bills/bonds,1.0,10000.0,110.30999755859375,90,9927.9
