@@ -15,11 +15,15 @@ The runtime dependencies are NumPy, pandas, and yfinance. Ruff is an optional de
 
 ## Setup and quick start
 
-Open PowerShell in the project directory. For this installation:
+The application lives in the `etf-investment-analyzer` subfolder of the `HV` repository. Git metadata and repository-wide ignore rules remain at the repository root.
+
+Open PowerShell in the application directory before using the commands below. For this installation:
 
 ```powershell
-Set-Location "F:\Users\Owner\etf-investment-analyzer"
+Set-Location "F:\Users\Owner\etf-investment-analyzer\etf-investment-analyzer"
 ```
+
+After cloning `HV` elsewhere, enter its `etf-investment-analyzer` subfolder instead. The launcher creates a new local `.venv` beside `run.ps1` if needed; it does not reuse the environment left at the repository root by the earlier layout.
 
 If Python is not installed, install it from [python.org](https://www.python.org/downloads/) or use:
 
@@ -105,7 +109,7 @@ Each successful run writes:
 
 Live and demo runs use separate default directories. Reusing an output directory overwrites files with the same names; it does not create an archive. An unsuccessful run may leave an older report in place. Always check the console result, report mode, generation timestamp, and latest price date. Do not mix demo and live runs in a shared custom output directory.
 
-`.venv`, default report folders, and Python caches are excluded from Git. A custom output folder is not automatically ignored.
+Virtual environments, demo reports, and Python caches are ignored by Git. The seven live report files listed above are explicitly versioned, so a new live run can modify tracked files despite the report-folder ignore rule. Other generated files in ignored report folders are not automatically added. A custom output folder is not automatically ignored.
 
 ## Portfolio examples
 
