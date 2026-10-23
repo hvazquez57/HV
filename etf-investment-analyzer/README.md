@@ -11,7 +11,7 @@ A Python command-line tool that compares illustrative ETF portfolios for a **$10
 - Internet access for installing dependencies and downloading live data. Once dependencies are installed, demo mode and unit tests do not require market-data access.
 - A browser to view the self-contained HTML report.
 
-The runtime dependencies are NumPy, pandas, and yfinance. Ruff is an optional development dependency. No brokerage account or API key is required.
+The runtime dependencies are NumPy, pandas, yfinance, and pandas-market-calendars. Ruff is an optional development dependency. No brokerage account or API key is required.
 
 ## Setup and quick start
 
@@ -41,7 +41,9 @@ The launcher creates `.venv`, installs `requirements.txt`, and runs the analyzer
 
 The execution-policy option applies to this PowerShell process; it does not permanently change system policy. Only run scripts you trust.
 
-The launcher records a hash of `requirements.txt` and reinstalls dependencies when that file changes. Dependency versions are bounded, not locked exactly; different installation dates may resolve different versions.
+The launcher records hashes of `requirements.txt`, applicable constraints, and the Python series; it reinstalls dependencies when those inputs change. On Windows x86-64 with Python 3.13, it applies `constraints-windows-py313.txt`, pinning tested runtime and optional development dependency versions. These constraints are environment-specific, not a universal lock. Other Python versions use bounded requirements and need separate validation.
+
+NumPy is constrained below 2.4 alongside pandas 2.x to avoid the observed generic-timedelta deprecation. Warnings are not suppressed; tests treat deprecation warnings as errors.
 
 ### Manual setup
 
@@ -51,10 +53,17 @@ Use a working Python 3.10+ executable:
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\python.exe .\analyze_etfs.py
-Start-Process .\reports\report.html
+$Latest = Get-Content .\reports\latest.json -Raw | ConvertFrom-Json
+Start-Process (Join-Path .\reports $Latest.report)
 ```
 
 Virtual-environment activation is not required. If `python` opens the Microsoft Store or is not found, use the full path to your installed Python executable for the first command.
+
+For the tested Windows x86-64/Python 3.13 environment, replace the dependency-install command with:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt -c constraints-windows-py313.txt
+```
 
 ## Usage
 
@@ -74,6 +83,14 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\run.ps1 -Demo -OpenRep
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\run.ps1 -Test
 ```
 
+Replay a newly generated live run without downloading prices:
+
+```powershell
+$Latest = Get-Content .\reports\latest.json -Raw | ConvertFrom-Json
+$SourceRun = Join-Path (Resolve-Path .\reports).Path $Latest.run_id
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\run.ps1 -Cached $SourceRun -OpenReport
+```
+
 ### Python command line
 
 Use Python directly for simulation settings or a custom output directory:
@@ -82,22 +99,24 @@ Use Python directly for simulation settings or a custom output directory:
 .\.venv\Scripts\python.exe .\analyze_etfs.py --help
 .\.venv\Scripts\python.exe .\analyze_etfs.py --amount 10000 --years 2 --simulations 20000 --seed 42 --output .\reports-custom
 .\.venv\Scripts\python.exe .\analyze_etfs.py --demo
+.\.venv\Scripts\python.exe .\analyze_etfs.py --cached $SourceRun --output .\cached_reports
 ```
 
 Options:
 
-- `--amount`: finite positive initial investment in USD; default `10000`.
+- `--amount`: finite positive initial investment in USD; default `10000` for live/demo or the source amount for cached replay.
 - `--years`: currently accepts **only `2`**.
-- `--simulations`: number of bootstrap paths, from `100` to `50000`; default `10000`.
-- `--seed`: nonnegative simulation random seed; default `42`.
-- `--output`: destination directory; defaults to `reports` beside the program, or `demo_reports` in demo mode.
+- `--simulations`: bootstrap paths, from `100` to `50000`; default `10000` or the source setting in cached mode.
+- `--seed`: nonnegative simulation seed; default `42` or the source seed in cached mode.
+- `--output`: root for immutable run directories; defaults to `reports`, `demo_reports`, or `cached_reports` beside the program according to mode.
 - `--demo`: explicitly use synthetic data, labeled as such in the report and JSON.
+- `--cached RUN_DIRECTORY`: replay a complete manifest-bearing market snapshot without network access; mutually exclusive with `--demo`.
 
-The launcher exposes `-Amount`, `-Demo`, `-Test`, and `-OpenReport`; other options require the Python command line.
+The launcher exposes `-Amount`, `-Demo`, `-Cached`, `-Output`, `-Test`, and `-OpenReport`; other options require the Python command line. Cached mode inherits the source amount unless `-Amount` is explicitly supplied.
 
 ## Generated files
 
-Each successful run writes:
+Each successful run writes a unique UTC timestamp/UUID-named subdirectory under the selected output root, containing:
 
 - `report.html`: browser-readable comparison, scenarios, allocations, and limitations.
 - `analysis.json`: structured results, source/mode, dates, settings, and methodology notes.
@@ -106,10 +125,23 @@ Each successful run writes:
 - `etf_history.csv`: historical metrics for each ETF.
 - `adjusted_prices.csv`: downloaded, validated dividend/split-adjusted prices used for return calculations.
 - `unadjusted_closes.csv`: validated non-dividend-adjusted closes used for initial share estimates.
+- `manifest.json`: completion status, input/artifact hashes, source provenance, analysis settings, model definitions, environment versions, source-code hashes, and Git revision/dirty state when available.
 
-Live and demo runs use separate default directories. Reusing an output directory overwrites files with the same names; it does not create an archive. An unsuccessful run may leave an older report in place. Always check the console result, report mode, generation timestamp, and latest price date. Do not mix demo and live runs in a shared custom output directory.
+The output root also contains `latest.json`, pointing to the last successfully published run's HTML and manifest. `-OpenReport` follows this pointer only after a successful invocation and checks that it is newly written. Do not use the legacy fixed `reports/report.html` as the result of a new run.
 
-Virtual environments, demo reports, and Python caches are ignored by Git. The seven live report files listed above are explicitly versioned, so a new live run can modify tracked files despite the report-folder ignore rule. Other generated files in ignored report folders are not automatically added. A custom output folder is not automatically ignored.
+All artifacts are staged privately on the same filesystem. Only after every write succeeds is the directory renamed into its final location; the latest pointer is then replaced atomically. Handled write/publication failures clean up this invocation's artifacts and leave previous complete runs and their pointer unchanged. Failure returns nonzero without a success message. Abrupt termination can leave unreferenced staging data; this is not a guarantee against power loss or filesystem failure.
+
+Live, cached, and demo runs have separate default roots. Previously committed files directly under `reports/` are legacy snapshots and remain unchanged. Existing tracked snapshots stay versioned; new run folders, default cached/demo outputs, virtual environments, and caches are ignored by Git. A custom output folder is not automatically ignored.
+
+### Cached replay and reproducibility
+
+Select the actual run directory containing `manifest.json`, not the output root or `latest.json`. The loader verifies all seven artifact hashes, cross-checks manifest/analysis provenance, and rejects missing, modified, incomplete, unsupported, or synthetic snapshots. Legacy reports have no verified manifest and cannot be used as caches; generate a new live run first.
+
+Replay preserves the source analysis cutoff, historical month selection, portfolio/stress definitions, amount, simulation count, and seed unless supported numeric options are explicitly overridden. Historical sessions are validated against that recorded cutoff, not today's freshness. Cached reports always say **CACHED / NOT LIVE** and display source dates; missing current sessions add a prominent **STALE CACHED DATA** warning. A stale snapshot is never silently treated as current.
+
+Source-run identity, source-manifest hash, original live-run identity, and settings are retained for chained replays. Inputs use round-trip floating-point CSV serialization. The same inputs/settings with the same source and compatible software reproduce financial metrics; timestamps, run IDs, and current-age warnings intentionally differ. Source-code or core dependency-version changes produce replay warnings; model/calendar-definition changes are rejected. Retain the corresponding source code and environment, particularly for dirty runs.
+
+The manifest stores Python/platform and installed package versions, Git commit/dirty state when available (explicit nulls otherwise), application-source hashes, constraints hash, input hashes, model definitions, cutoff dates, and random seeds. It does not capture credentials or environment-variable values. Hashes detect accidental changes; they are not signatures or independent proof of vendor data accuracy.
 
 ## Portfolio examples
 
@@ -135,17 +167,20 @@ These are predefined comparisons, not portfolios selected by maximizing historic
 
 Live mode requests ten years of daily Yahoo Finance history through [yfinance](https://ranaroussi.github.io/yfinance/), using `auto_adjust=False` to obtain both `Adj Close` and `Close`.
 
-The calendar date is determined in `America/New_York`. All bars dated today or later are excluded, even if today's session has already closed. This avoids using an incomplete current-session bar.
+The calendar date is determined in `America/New_York`. All bars dated today or later are excluded, even after close. NYSE sessions from pandas-market-calendars provide the shared US-equity holiday/closure calendar for this fixed ETF universe, including early-close dates as valid daily sessions. This is a calendar proxy, not an independent market-data source.
 
 Validation requires all five ETFs and:
 
 - Matching adjusted/unadjusted date indexes with no duplicate dates.
 - Finite, strictly positive prices and no partially missing rows.
-- A latest observation no more than five calendar days old.
+- A latest observation equal to the last eligible trading session strictly before the cutoff.
 - At least 1,260 daily rows, used as an approximate five-year minimum.
-- No gap between retained daily rows longer than seven calendar days.
+- Every expected session from the requested ten-year start through the eligible final session, including leading, interior, and trailing sessions.
+- No off-calendar dates, malformed/null daily labels, or non-midnight observations.
 
-Completely empty rows are dropped; missing individual ETF observations are not forward-filled. These checks are basic safeguards, not a full exchange-calendar audit or independent verification of vendor data. A live-data failure does **not** trigger a synthetic fallback.
+Completely empty rows are dropped but still cause rejection when an expected session is left missing. Individual observations are not forward-filled. Calendar rules are packaged locally and may require updates for newly announced or corrected closures.
+
+Live downloads allow at most three application-level attempts with 1- and 2-second backoff and a 30-second timeout per provider request. Provider-level retries are temporarily disabled to avoid multiplying retry budgets and are restored afterward. Empty/incomplete/missing-session responses and identifiable transient transport/rate-limit errors can be retried; invalid values and schemas fail immediately. The timeout is per request, not a guarantee on the whole multi-ETF operation. Persistent failure returns nonzero and publishes nothing. There is **no automatic cached or synthetic fallback**.
 
 ### Monthly returns and historical risk
 
@@ -217,25 +252,26 @@ Install development dependencies after creating the virtual environment:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
-.\.venv\Scripts\python.exe -m unittest discover -s tests -t . -v
-.\.venv\Scripts\python.exe -m ruff check --config pyproject.toml analyze_etfs.py tests
+.\.venv\Scripts\python.exe -W error::DeprecationWarning -m unittest discover -s tests -t . -v
+.\.venv\Scripts\python.exe -m ruff check --config pyproject.toml analyze_etfs.py market_data.py report_store.py tests
+.\.venv\Scripts\python.exe -m pip check
 ```
 
-The unit tests cover allocation math, weights, historical metrics, data rejection, current-session exclusion, joint bootstrap behavior, report exports, CLI validation, and HTML escaping. The download-failure test mocks the provider; tests do not require live market data.
+On Windows x86-64/Python 3.13, add `-c constraints-windows-py313.txt` to the development dependency installation. Tests cover the original financial calculations plus holidays, single missing sessions, bounded retries, cached integrity/staleness/frozen-cutoff replay, concurrent publication, unavailable Git metadata, and injected input/render/manifest/rename/pointer failures. They check financial regression against the committed market snapshot. Provider calls are mocked; tests do not need live data.
 
 ## Next steps for future enhancements
 
-The items below are proposed work, **not currently implemented features**. Prioritize data integrity and reproducibility before expanding the investment model or interface. Keep the current $10,000, two-year example available as a regression case.
+Item 1 is implemented as described above; items 2-4 remain proposed work, **not currently implemented features**. Keep the $10,000, two-year example available as a regression case.
 
 ### 1. Strengthen data reliability and reproducibility
 
-- Use an exchange trading calendar to validate expected sessions and distinguish holidays from missing prices; test weekends, holiday closures, and incomplete sessions.
-- Add bounded retries for transient provider errors and rate limits. Preserve the current fail-closed behavior for missing or stale data; never substitute demo data for live prices.
-- Introduce an explicit cached-data mode with source dates and a prominent stale-data warning, separate from live and synthetic modes.
-- Write reports into timestamped run directories and publish them only after every output succeeds, so a failed run cannot leave a mixture of old and new files.
-- Record the Git commit, resolved dependency versions, input-data hashes, settings, and random seeds with each run. Add a tested dependency lock or constraints file and resolve the current NumPy/pandas timedelta deprecation warnings.
+- Implemented NYSE-session validation, including holiday closures, missing/extra sessions, and current-session exclusion.
+- Implemented bounded retries and fail-closed behavior with no implicit mode fallback.
+- Implemented explicit integrity-checked cached replay with frozen cutoff dates and stale-data warnings.
+- Implemented immutable run folders, all-artifact staging, and atomic latest-pointer publication.
+- Implemented reproducibility metadata and tested Windows/Python 3.13 constraints; deprecation warnings are tested as errors.
 
-Completion criterion: a saved input snapshot and recorded environment reproduce the numerical results, and injected download/write failures cannot produce a misleading successful report.
+Validation: saved inputs/settings reproduce financial metrics; injected download/write/publication failures cannot produce misleading successful reports. Concurrency and preservation of prior outputs are covered offline.
 
 ### 2. Make assumptions configurable without weakening safeguards
 
@@ -267,16 +303,17 @@ Completion criterion: a fresh checkout can install, test, and generate a clearly
 
 ### Suggested implementation order and contribution workflow
 
-Start with reproducible run metadata and safer report publication, then add CI coverage, configurable portfolios, and model/report improvements in small independent changes.
+With reproducible metadata and safer publication implemented, add CI coverage next, followed by configurable portfolios and model/report improvements in small independent changes.
 
-The `feature/future-enhancements` branch is available for follow-up work. Before starting an enhancement, synchronize with the latest `main`; use a focused feature branch when the work can be reviewed independently. Open integration PRs against **`main`**, include tests and methodology/documentation updates, and keep virtual environments, credentials, and caches out of commits. Update tracked live reports only intentionally, with their generation settings and data dates documented.
+Before starting an enhancement, synchronize with the latest `main` and create a focused feature branch. Open integration PRs against **`main`**, include tests and methodology/documentation updates, and keep virtual environments, credentials, and caches out of commits. Add generated snapshots only intentionally, documenting settings and data dates.
 
-[PR #1](https://github.com/hvazquez57/HV/pull/1) is a draft retrospective review against `review/initial-project-baseline`, not an integration PR into `main`. Do not use that review baseline as the destination for new enhancements. This roadmap does not add automated trading or guarantees of investment performance.
+[PR #1](https://github.com/hvazquez57/HV/pull/1) began as a retrospective review, was retargeted to `main`, and merged the roadmap documentation. Its old feature branch was deleted. Do not target `review/initial-project-baseline` for enhancements. This roadmap adds neither automated trading nor guarantees of investment performance.
 
 ## Troubleshooting
 
 - **Python not found:** install Python or use its full executable path; the Microsoft Store alias is not a Python installation.
 - **Dependency setup fails:** confirm internet/proxy access and retry `python -m pip install -r requirements.txt` using the virtual-environment Python.
 - **Download, missing-data, or stale-data error:** check connectivity, provider availability, and the dates reported. The program deliberately refuses incomplete or stale data rather than filling it. Use `--demo` only to try the interface, not to obtain market analysis.
-- **Old report still present:** failed runs do not remove previous reports. Verify the run succeeded and inspect report timestamps.
+- **Old report still present:** prior complete runs and legacy reports are deliberately preserved. Use the new path printed on success or the output root's `latest.json`; failed runs do not advance that pointer.
+- **Cache rejected:** choose a complete new-format market-data run directory. Missing manifests, hash mismatches, synthetic runs, and unsupported provenance are rejected.
 - **Need another horizon, currency, or ETF universe:** these are not supported CLI settings. They require coordinated code, methodology, and test changes; currently `--years` accepts only `2`.

@@ -131,6 +131,7 @@ class AnalyzerTests(unittest.TestCase):
 
     def test_download_failure_does_not_use_demo(self):
         with patch("yfinance.download", return_value=pd.DataFrame()), \
+                patch("market_data.time.sleep"), \
                 patch.object(app, "demo_prices") as demo:
             with self.assertRaisesRegex(ValueError, "download failed"):
                 app.download_prices(self.today)
