@@ -12,6 +12,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+import market_data
+import report_store
+
 ASSETS = {
     "VTI": "Broad US stocks",
     "VUG": "US growth stocks (overlaps VTI)",
@@ -74,65 +77,24 @@ def validate_prices(
     close: pd.DataFrame,
     today: pd.Timestamp,
     check_freshness: bool = True,
+    requested_start: pd.Timestamp | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Reject missing funds, stale series, holes and nonpositive observations."""
-    frames = []
-    for label, frame in (("adjusted", adjusted), ("close", close)):
-        if not isinstance(frame, pd.DataFrame) or frame.empty:
-            raise ValueError(f"No {label} prices downloaded. Check internet/provider access.")
-        missing = set(ASSETS) - set(frame.columns)
-        if missing:
-            raise ValueError(f"Missing {label} ETF prices: {', '.join(sorted(missing))}")
-        data = frame.loc[:, list(ASSETS)].copy()
-        data.index = pd.to_datetime(data.index).tz_localize(None).normalize()
-        data = data.loc[data.index < today].sort_index()
-        if data.index.has_duplicates:
-            raise ValueError("Duplicate market dates in price data.")
-        # Completely empty rows can represent provider-inserted non-trading dates.
-        data = data.dropna(how="all")
-        if data.empty or data.isna().any().any():
-            raise ValueError(f"Incomplete {label} data; refusing to fill missing ETF prices.")
-        if not np.isfinite(data.to_numpy(dtype=float)).all() or (data <= 0).any().any():
-            raise ValueError(f"Invalid {label} prices.")
-        if check_freshness and (today - data.index[-1]).days > 5:
-            raise ValueError(f"Stale {label} prices: latest date {data.index[-1].date()}.")
-        frames.append(data)
-    if not frames[0].index.equals(frames[1].index):
-        raise ValueError("Adjusted and unadjusted price dates do not match.")
-    # Require a useful multi-year comparison and enough full two-year windows.
-    if len(frames[0]) < 252 * 5:
-        raise ValueError("At least five years of common daily history are required.")
-    if (frames[0].index.to_series().diff().dt.days.dropna() > 7).any():
-        raise ValueError("Unexpected gap longer than seven days in daily history.")
-    return frames[0], frames[1]
+    return market_data.validate_prices(
+        adjusted, close, today, ASSETS, check_freshness, requested_start,
+    )
 
 
 def download_prices(today: pd.Timestamp) -> tuple[pd.DataFrame, pd.DataFrame]:
-    import yfinance as yf
-
-    raw = yf.download(
-        list(ASSETS),
-        start=(today - pd.DateOffset(years=10)).strftime("%Y-%m-%d"),
-        end=today.strftime("%Y-%m-%d"),
-        auto_adjust=False,
-        actions=False,
-        progress=False,
-        threads=False,
-        timeout=30,
-        group_by="column",
-        multi_level_index=True,
-    )
-    if raw is None or raw.empty or not isinstance(raw.columns, pd.MultiIndex):
-        raise ValueError("Market-data download failed. No synthetic fallback was used.")
-    if not {"Adj Close", "Close"}.issubset(raw.columns.get_level_values(0)):
-        raise ValueError("Provider did not return both adjusted and unadjusted closes.")
-    return validate_prices(raw["Adj Close"], raw["Close"], today)
+    adjusted, close, _ = market_data.download_prices(today, ASSETS)
+    return adjusted, close
 
 
 def demo_prices(today: pd.Timestamp) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Synthetic test data only: never presented as actual market prices."""
     rng = np.random.default_rng(42)
-    dates = pd.bdate_range(today - pd.DateOffset(years=10), today - pd.Timedelta(days=1))
+    dates = market_data.session_dates(
+        today - pd.DateOffset(years=10), today - pd.Timedelta(days=1),
+    )
     common = rng.normal(0, 0.009, (len(dates), 1))
     beta = np.array([1.0, 1.2, 0.9, -0.03, 0.0])
     noise = rng.normal(size=(len(dates), 5)) * np.array([0.003, 0.005, 0.005, 0.001, 0.0001])
@@ -299,6 +261,8 @@ def write_report(result: dict, output: Path) -> Path:
         "background:#fff0ce;border-left:5px solid #b36b00}li{margin:12px 0}"
         "section{margin:30px 0}small{color:#45586b}</style></head><body>",
         "<h1>ETF investment comparison</h1>",
+        *[f"<p class='warning'><strong>{escape(warning)}</strong></p>"
+          for warning in result.get("data_warnings", [])],
         f"<p class='warning'><strong>{escape(result['mode'])}</strong><br>"
         "Growth and low risk can conflict over two years. Capital is not guaranteed. "
         "These are illustrative choices, not a buy recommendation.</p>",
@@ -348,6 +312,14 @@ def write_report(result: dict, output: Path) -> Path:
             "Do not combine allocations from the different example portfolios.</p></section>",
         ])
     parts.extend([
+        "<h2>Reproducibility and source provenance</h2>",
+        "<p>Each published run includes a manifest with input/artifact SHA-256 hashes, "
+        "analysis cutoff, model settings, source-code hashes, Git status, and resolved "
+        "dependency versions. Hashes detect accidental changes; they are not digital "
+        "signatures or independent verification of the market data.</p>",
+        "<details><summary>Recorded run metadata</summary><pre>"
+        + escape(json.dumps(result.get("reproducibility", {}), indent=2, sort_keys=True))
+        + "</pre></details>",
         "<h2>ETF historical risk</h2>",
         table(
             ["ETF", "Exposure", "Annualized growth", "Annualized volatility",
@@ -366,33 +338,148 @@ def write_report(result: dict, output: Path) -> Path:
     return report
 
 
+def prepare_analysis(args, today: pd.Timestamp) -> tuple[dict, pd.DataFrame, pd.DataFrame]:
+    """Resolve explicit modes and frozen replay settings before doing calculations."""
+    cached = report_store.load_snapshot(args.cached) if args.cached else None
+    defaults = {"amount": 10000, "years": 2, "simulations": 10000, "seed": 42}
+    settings = dict(defaults if cached is None else cached.manifest["settings"])
+    for key in defaults:
+        if getattr(args, key) is not None:
+            settings[key] = getattr(args, key)
+    settings.update({"demo_seed": 42 if args.demo else None, "block_months": 3})
+    if not np.isfinite(settings["amount"]) or settings["amount"] <= 0:
+        raise ValueError("Investment must be finite and positive.")
+    if (
+        settings["years"] != 2
+        or not isinstance(settings["simulations"], int)
+        or not 100 <= settings["simulations"] <= 50000
+        or not isinstance(settings["seed"], int) or settings["seed"] < 0
+    ):
+        raise ValueError("Invalid horizon, simulation count, or random seed.")
+    model = {"assets": ASSETS, "portfolios": PORTFOLIOS, "stress": STRESS, "version": 1}
+    cutoff = today
+    start = cutoff - pd.DateOffset(years=10)
+    warnings = []
+    attempts = 0
+    source_snapshot = None
+    if cached:
+        manifest = cached.manifest
+        if manifest["model"] != model or manifest["calendar"] != market_data.CALENDAR_NAME:
+            raise ValueError("Cached model definitions differ from this program; replay refused.")
+        if manifest["settings"]["block_months"] != 3 or manifest["settings"]["demo_seed"] is not None:
+            raise ValueError("Unsupported cached model settings.")
+        cutoff = pd.Timestamp(manifest["analysis_cutoff"])
+        start = pd.Timestamp(manifest["requested_start"])
+        if pd.isna(cutoff) or pd.isna(start) or cutoff.tz is not None or start.tz is not None:
+            raise ValueError("Invalid cached analysis date.")
+        if cutoff != cutoff.normalize() or start != start.normalize() or cutoff > today or start >= cutoff:
+            raise ValueError("Invalid or future cached analysis cutoff.")
+        adjusted, close = validate_prices(
+            cached.adjusted, cached.close, cutoff, requested_start=start,
+        )
+        if str(close.index[-1].date()) != manifest["latest_price_date"]:
+            raise ValueError("Cached latest price date disagrees with the input snapshot.")
+        warnings.append(
+            f"CACHED DATA - NOT LIVE. Prices through {close.index[-1].date()}; "
+            f"analysis cutoff frozen at {cutoff.date()}."
+        )
+        missed = market_data.session_dates(
+            close.index[-1] + pd.Timedelta(days=1), market_data.latest_session(today),
+        )
+        age = (today - close.index[-1]).days
+        if len(missed):
+            warnings.append(
+                f"STALE CACHED DATA: {len(missed)} eligible sessions behind; "
+                f"latest prices are {age} calendar days old. Not suitable as current quotes."
+            )
+        source_snapshot = {
+            "run_id": manifest["run_id"],
+            "manifest_sha256": report_store.sha256(
+                (args.cached.expanduser().resolve() / "manifest.json").read_bytes()
+            ),
+            "origin_run_id": (
+                manifest["source_snapshot"]["origin_run_id"]
+                if manifest["source_snapshot"] else manifest["run_id"]
+            ),
+        }
+        current_sources = {
+            name: report_store.sha256((Path(__file__).parent / name).read_bytes())
+            for name in report_store.SOURCE_FILES
+        }
+        if manifest["environment"]["source_code_sha256"] != current_sources:
+            warnings.append("Software sources differ from the source run; exact replay is not guaranteed.")
+        source_versions = {
+            name.lower().replace("_", "-"): version
+            for name, version in manifest["environment"]["dependencies"].items()
+        }
+        current_versions = {
+            name.lower().replace("_", "-"): version
+            for name, version in report_store.dependency_versions().items()
+        }
+        core_packages = ("numpy", "pandas", "yfinance", "pandas-market-calendars", "exchange-calendars")
+        if any(source_versions.get(name) != current_versions.get(name) for name in core_packages):
+            warnings.append(
+                "Numerical/provider/calendar dependency versions differ from the source run; "
+                "use the recorded environment for reproducible results."
+            )
+        mode = "cached"
+    elif args.demo:
+        adjusted, close = demo_prices(cutoff)
+        mode = "demo"
+        warnings.append("SYNTHETIC DEMO: no prices in this report are actual market observations.")
+    else:
+        adjusted, close, attempts = market_data.download_prices(cutoff, ASSETS)
+        mode = "live"
+    result = analyze(
+        adjusted, close, settings["amount"], settings["years"],
+        settings["simulations"], settings["seed"], cutoff, args.demo,
+    )
+    if cached:
+        result["mode"] = "CACHED MARKET DATA - NOT LIVE"
+        result["source"] = "Verified saved Yahoo Finance snapshot (not a fresh download)"
+    result["data_warnings"] = warnings
+    result["reproducibility"] = {
+        "mode": mode, "data_kind": "demo" if args.demo else "live",
+        "analysis_cutoff": str(cutoff.date()), "requested_start": str(start.date()),
+        "calendar": market_data.CALENDAR_NAME, "settings": settings, "model": model,
+        "download_attempts": attempts, "source_snapshot": source_snapshot,
+        "publication_date": str(today.date()),
+    }
+    return result, adjusted, close
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--amount", type=float, default=10000, help="Initial investment in USD.")
-    parser.add_argument("--years", type=int, choices=[2], default=2, help="Two-year investment horizon.")
-    parser.add_argument("--simulations", type=int, default=10000, help="Bootstrap paths, 100-50000.")
-    parser.add_argument("--seed", type=int, default=42, help="Nonnegative reproducible random seed.")
-    parser.add_argument("--output", type=Path, default=None, help="Report output directory.")
-    parser.add_argument("--demo", action="store_true", help="Use clearly labeled synthetic data.")
+    parser.add_argument("--amount", type=float, default=None, help="USD amount; default 10000 or cached value.")
+    parser.add_argument("--years", type=int, choices=[2], default=None, help="Two-year investment horizon.")
+    parser.add_argument("--simulations", type=int, default=None, help="Paths, 100-50000; default 10000 or cached.")
+    parser.add_argument("--seed", type=int, default=None, help="Seed; default 42 or the source run's value.")
+    parser.add_argument("--output", type=Path, default=None, help="Root for immutable report run directories.")
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument("--demo", action="store_true", help="Use clearly labeled synthetic data.")
+    modes.add_argument("--cached", type=Path, help="Replay a completed market-data run without network access.")
     args = parser.parse_args(argv)
-    if not np.isfinite(args.amount) or args.amount <= 0:
+    if args.amount is not None and (not np.isfinite(args.amount) or args.amount <= 0):
         parser.error("--amount must be finite and positive.")
-    if not 100 <= args.simulations <= 50000:
+    if args.simulations is not None and not 100 <= args.simulations <= 50000:
         parser.error("--simulations must be between 100 and 50000.")
-    if args.seed < 0:
+    if args.seed is not None and args.seed < 0:
         parser.error("--seed must be nonnegative.")
     # Use the exchange's calendar date even when run from another time zone.
     today = pd.Timestamp.now(tz="America/New_York").tz_localize(None).normalize()
     try:
-        print("Loading SYNTHETIC DEMO data..." if args.demo else "Downloading completed ETF sessions...")
-        adjusted, close = demo_prices(today) if args.demo else download_prices(today)
-        result = analyze(adjusted, close, args.amount, args.years,
-                         args.simulations, args.seed, today, args.demo)
-        default_output = Path(__file__).parent / ("demo_reports" if args.demo else "reports")
+        print("Loading explicit cached snapshot..." if args.cached else (
+            "Loading SYNTHETIC DEMO data..." if args.demo else "Downloading completed ETF sessions..."
+        ))
+        result, adjusted, close = prepare_analysis(args, today)
+        for warning in result["data_warnings"]:
+            print(f"WARNING: {warning}", file=sys.stderr)
+        folder = "cached_reports" if args.cached else ("demo_reports" if args.demo else "reports")
+        default_output = Path(__file__).parent / folder
         output = (args.output or default_output).expanduser().resolve()
-        report = write_report(result, output)
-        adjusted.to_csv(output / "adjusted_prices.csv", index_label="date")
-        close.to_csv(output / "unadjusted_closes.csv", index_label="date")
+        report = report_store.publish_run(
+            result, adjusted, close, output, write_report, Path(__file__).parent,
+        )
         print(f"\n{result['mode']}\nLatest price date: {result['latest_price_date']}")
         for p in result["portfolios"]:
             print(f"\n{p['name']}")
@@ -402,7 +489,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  Hypothetical stress value: {money(p['hypothetical_stress_value_usd'])}")
         print(f"\nReport: {report}\nEducational examples only. Principal can be lost.")
         return 0
-    except (ValueError, OSError, RuntimeError, KeyError) as exc:
+    except (ValueError, OSError, RuntimeError, KeyError, TypeError, OverflowError) as exc:
         print(f"Analysis failed: {exc}\nNo fabricated market analysis was substituted.", file=sys.stderr)
         return 1
 

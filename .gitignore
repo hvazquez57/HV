@@ -3,3 +3,4 @@ __pycache__/
 .ruff_cache/
 reports/
 demo_reports/
+cached_reports/
